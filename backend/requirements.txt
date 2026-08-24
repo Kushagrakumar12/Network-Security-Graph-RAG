@@ -1,0 +1,30 @@
+# Runtime dependencies for the Network Security Graph RAG backend.
+#
+# Lower bounds reflect APIs the code actually relies on:
+#   - pydantic>=2.0        : model_dump(), field_validator (v1 would break)
+#   - pydantic-settings>=2.3: NoDecode annotation used by app/config.py
+#
+# Document-era packages (langchain, beautifulsoup4, PyPDF2, docx2txt) were
+# removed: they are only referenced by app/deprecated/, which the app does not
+# import. Install them manually if you revive that code.
+
+# --- Web framework ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.9
+
+# --- Configuration & validation ---
+pydantic>=2.0.0
+pydantic-settings>=2.3.0
+python-dotenv>=1.0.0
+
+# --- Database ---
+neo4j>=5.9.0
+
+# --- HTTP clients (httpx preferred; requests is the llm_factory fallback) ---
+httpx>=0.24.0
+requests>=2.28.2
+
+# --- ML for anomaly detection ---
+scikit-learn>=1.0.0
+numpy>=1.24.0

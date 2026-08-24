@@ -1,0 +1,57 @@
+# Docker ignore file for the backend image.
+#
+# IMPORTANT: this is the .dockerignore that actually applies. The compose build
+# context is ./backend (see docker-compose.yml), and Docker only reads
+# <context>/.dockerignore -- so the repository-root .dockerignore is never
+# consulted for this image. Keep exclusions here, not there.
+
+# ---------------------------------------------------------------------------
+# Secrets -- never bake credentials into an image
+# ---------------------------------------------------------------------------
+# The quickstart tells developers to `cp backend/.env.example backend/.env`,
+# which puts a live GROQ_API_KEY right next to the Dockerfile's `COPY . .`.
+# The container receives configuration through compose (env_file/environment),
+# so the image never needs the file itself.
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Datasets - these should NOT be in the Docker image
+# ---------------------------------------------------------------------------
+sample_data/*.csv
+sample_data/*.json
+sample_data/.processed_files
+
+# ---------------------------------------------------------------------------
+# Tests - not needed at runtime
+# ---------------------------------------------------------------------------
+tests/
+pytest.ini
+requirements-dev.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs
+logs/
+*.log
+
+# Testing
+.coverage
+htmlcov/
+coverage.xml

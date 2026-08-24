@@ -1,0 +1,59 @@
+# Production-oriented compose file.
+#
+# Configuration comes from backend/.env (copy backend/.env.example first).
+# For local development with hot-reload and a source bind-mount, add:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    # Secrets and tunables live in backend/.env (copy backend/.env.example).
+    # Marked optional so the stack still starts on a fresh clone; without it,
+    # GROQ_API_KEY is unset and RAG queries return a clear configuration error.
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      # These point the app at the compose-managed Neo4j and override any
+      # localhost defaults from .env. Non-secret, so they stay inline.
+      - NEO4J_URI=bolt://neo4j:7687
+      - PYTHONPATH=/app
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5.11.0
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    environment:
+      # NEO4J_AUTH must match NEO4J_USER / NEO4J_PASSWORD in backend/.env.
+      - NEO4J_AUTH=${NEO4J_AUTH:-neo4j/password}
+      - NEO4J_server_memory_heap_initial__size=1G
+      - NEO4J_server_memory_heap_max__size=2G
+      - NEO4J_server_memory_pagecache_size=1G
+    healthcheck:
+      test: [ "CMD", "wget", "-O", "/dev/null", "-q", "http://localhost:7474" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  neo4j_data:
+  neo4j_logs:

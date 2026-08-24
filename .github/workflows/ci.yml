@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor claimed in the README and the version the Docker
+        # image is built on; the newer entries guard against upstream breakage.
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Verify the app imports without a database
+        working-directory: backend
+        # A regression we shipped once: module-level Neo4jService construction
+        # meant importing the app required a live database.
+        run: python -c "from app.main import app; print(f'{len(app.openapi()[\"paths\"])} paths')"
+
+      - name: Run tests
+        working-directory: backend
+        # pytest.ini deselects the `integration` marker, so no Neo4j is needed.
+        run: pytest -q
+
+  compose:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate base stack
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Validate base + dev overlay
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
+
+      - name: Build backend image
+        # Context is ./backend, matching docker-compose.yml -- the Dockerfile's
+        # `COPY requirements.txt .` resolves relative to that, not the repo root.
+        run: docker build -f docker/backend.Dockerfile -t nsg-rag-backend:ci ./backend
+
+      - name: Image contains no .env and no datasets
+        # backend/.dockerignore must keep credentials out of the image. The
+        # build context is ./backend, so the root .dockerignore does not apply.
+        run: |
+          printf 'GROQ_API_KEY=gsk_ci_canary_value\n' > backend/.env
+          docker build -f docker/backend.Dockerfile -t nsg-rag-canary:ci ./backend
+          rm -f backend/.env
+          if docker run --rm --entrypoint sh nsg-rag-canary:ci -c 'ls -a /app/.env' 2>/dev/null; then
+            echo "::error::backend/.env was copied into the image; fix backend/.dockerignore"
+            exit 1
+          fi
+          echo "no .env in image"
+
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No .env file is committed
+        run: |
+          if git ls-files --error-unmatch backend/.env >/dev/null 2>&1; then
+            echo "::error::backend/.env is tracked; it must stay gitignored"
+            exit 1
+          fi
+          echo "no tracked .env"
+
+      - name: .env.example carries no real credentials
+        run: |
+          # A Groq key looks like gsk_<48 chars>; the template must hold placeholders.
+          if grep -Eq 'gsk_[A-Za-z0-9]{20,}' backend/.env.example; then
+            echo "::error::backend/.env.example appears to contain a real API key"
+            exit 1
+          fi
+          echo ".env.example is clean"

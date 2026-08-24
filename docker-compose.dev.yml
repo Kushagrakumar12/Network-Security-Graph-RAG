@@ -1,0 +1,21 @@
+# Local development overlay: source bind-mount + hot reload + debug logging.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# The bind-mount shadows the image's /app, so code edits take effect without a
+# rebuild. It also means the image's own copy of the code is not what runs.
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
